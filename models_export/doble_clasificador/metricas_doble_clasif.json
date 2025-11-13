@@ -1,0 +1,42 @@
+{
+    "A.1 (Valor Alto)": {
+        "metricas": {
+            "accuracy_cls1": 0.9538461538461539,
+            "precision_cls1": 0.953125,
+            "recall_cls1": 1.0,
+            "f1_cls1": 0.976,
+            "auc_cls1": 1.0,
+            "reporte_cls2": "              precision    recall  f1-score   support\n\n        Baja       0.76      0.70      0.73        27\n        Alta       0.78      0.82      0.80        34\n\n    accuracy                           0.77        61\n   macro avg       0.77      0.76      0.77        61\nweighted avg       0.77      0.77      0.77        61\n",
+            "auc_cls2": 0.8442265795206972,
+            "umbral_prob": 0.5,
+            "n_clases_train": 2
+        },
+        "n_train": 260,
+        "n_test": 65,
+        "proporcion_ventas_train": 0.9576923076923077,
+        "proporcion_ventas_test": 0.9384615384615385,
+        "limites_rangos": {
+            "q_50": 745.0
+        }
+    },
+    "A.2 (Valor Medio)": {
+        "metricas": {
+            "accuracy_cls1": 1.0,
+            "precision_cls1": 1.0,
+            "recall_cls1": 1.0,
+            "f1_cls1": 1.0,
+            "auc_cls1": 1.0,
+            "reporte_cls2": "              precision    recall  f1-score   support\n\n        Baja       0.40      1.00      0.57         2\n        Alta       1.00      0.62      0.77         8\n\n    accuracy                           0.70        10\n   macro avg       0.70      0.81      0.67        10\nweighted avg       0.88      0.70      0.73        10\n",
+            "auc_cls2": 0.8125,
+            "umbral_prob": 0.5,
+            "n_clases_train": 2
+        },
+        "n_train": 100,
+        "n_test": 25,
+        "proporcion_ventas_train": 0.44,
+        "proporcion_ventas_test": 0.4,
+        "limites_rangos": {
+            "q_50": 57.0
+        }
+    }
+}
