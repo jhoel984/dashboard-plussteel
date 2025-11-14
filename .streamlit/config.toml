@@ -1,23 +1,14 @@
 # .streamlit/config.toml
 
 [theme]
-# Forzar el tema oscuro
-base = "dark" 
+base = "dark"  # Forzar modo oscuro
 
-# NUEVO ACENTO: Plata/Gris claro para botones y pestañas
-primaryColor="#E0E0E0" 
+# Colores corporativos
+primaryColor = "#E0E0E0"  # Plata/Gris claro (botones, tabs, primario)
+backgroundColor = "#212121"  # Fondo oscuro neutro
+secondaryBackgroundColor = "#CC0000"  # Sidebar rojo del logo
 
-# Fondo principal oscuro y neutro
-backgroundColor="#212121" 
-
-# NUEVO SIDEBAR: El rojo de tu logo
-secondaryBackgroundColor="#CC0000" 
-
-# Texto blanco para legibilidad
-textColor="#FFFFFF" 
-
-# Un gris más claro para texto secundario
-secondaryTextColor = "#B0B0B0" 
-
-# Fuente estándar
-font="sans serif"
+# Tipografía y colores de texto
+textColor = "#FFFFFF"  # Blanco para legibilidad
+secondaryTextColor = "#B0B0B0"  # Gris claro para texto secundario
+font = "sans serif"

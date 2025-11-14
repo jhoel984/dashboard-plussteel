@@ -4,25 +4,74 @@ import numpy as np
 import joblib
 import os
 import json
+import locale
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import warnings
+import requests # Añadido para futuras integraciones
 
 warnings.filterwarnings('ignore')
-
+# Configuración regional para español (para meses como 'Noviembre')
+try:
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except:
+    locale.setlocale(locale.LC_TIME, 'Spanish')
 # =============================================================================
 # CONFIGURACIÓN DE PÁGINA
 # =============================================================================
 st.set_page_config(
     page_title="Dashboard PlusSteel",
-    # Usa el logo circular rojo para el favicon
+    # MODIFICADO: Estandarizado al logo circular rojo
     page_icon="assets/logo2.png",  
     layout="wide",
     initial_sidebar_state="expanded"
 )
+# CSS Personalizado (basado en tu código)
+st.markdown("""
+<style>
+body {
+    font-family: 'Segoe UI', sans-serif;
+}
+h1, h2, h3, h4 {
+    color: #E0E0E0;
+}
+div.stButton > button {
+    background-color: #E0E0E0;
+    color: #212121;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    padding: 0.5em 1.5em;
+}
+div.stButton > button:hover {
+    background-color: #B0B0B0;
+    color: #000000;
+}
+[data-testid="stMetricDelta"] {
+    color: #FFCC00;
+}
+/* Inputs (Base) */
+input, select, textarea {
+    border-radius: 8px !important;
+    background-color: #2C2C2C;
+    color: #FFFFFF;
+    border: 1px solid #444;
+}
 
+section[data-testid="stSidebar"] {
+    background-color: #CC0000 !important;
+    color: #FFFFFF;
+}
+hr {
+    border: 0;
+    height: 1px;
+    background: #444;
+    margin: 2em 0;
+}
+</style>
+""", unsafe_allow_html=True)
 # =============================================================================
 # CONSTANTES Y RUTAS
 # =============================================================================
@@ -41,8 +90,6 @@ MODELOS_REENTRENADOS_FILE = os.path.join(DIR_REENTRENADOS, 'modelos_reentrenados
 # =============================================================================
 # FUNCIONES AUXILIARES (DE TU NOTEBOOK)
 # =============================================================================
-# (Las funciones preparar_datos_doble_clasificador y predecir_producto
-# se mantienen exactamente igual que en tu script original)
 def preparar_datos_doble_clasificador(df_segmento):
     """
     Prepara datos para modelo doble-clasificador (desde Celda 10.5)
@@ -173,6 +220,23 @@ def predecir_producto(df_single_row, segmento, modelos, scalers, features, limit
         'umbral_optimizado_usado': umbral 
     }
 
+def obtener_precio_promedio(df_historial_producto):
+    """
+    Calcula el precio promedio ponderado de un producto.
+    """
+    df_ventas_reales = df_historial_producto[df_historial_producto['cantidad_vendida'] > 0]
+    
+    if df_ventas_reales.empty:
+        return 0 
+
+    venta_total_bs = df_ventas_reales['venta_bs'].sum()
+    cantidad_total = df_ventas_reales['cantidad_vendida'].sum()
+    
+    if cantidad_total == 0:
+        return 0
+        
+    return venta_total_bs / cantidad_total
+
 # =============================================================================
 # CARGA DE DATOS (CACHEADA Y EN SESSION STATE)
 # =============================================================================
@@ -254,7 +318,7 @@ else:
 # SIDEBAR - NAVEGACIÓN Y DATOS
 # =============================================================================
 with st.sidebar:
-    # Usa el logo circular rojo
+    # MODIFICADO: Estandarizado al logo circular rojo
     st.image("assets/logo1.png", use_container_width=True) 
     
     # MODIFICADO: Menú de navegación sin emojis
@@ -319,8 +383,6 @@ if pagina_seleccionada == "Inicio":
     st.title("Bienvenido al Dashboard de PlusSteel")
     st.markdown("Sistema de Pronóstico de Demanda con Inteligencia Artificial")
     
-    
-
     st.subheader("Quiénes Somos")
     st.markdown("""
     Somos una empresa que nació con el firme compromiso de ser líderes en la fabricación de perfilería metálica
@@ -445,6 +507,66 @@ elif pagina_seleccionada == "Pronóstico":
                     else:
                         st.info(f"**Recomendación: Demanda Moderada.**\n\nReabastecer con cautela (Prob. Venta Baja: {resultado['P(Venta Baja)']:.1%}).")
 
+                    
+                    # ==========================================================
+                    # ⭐ INICIO DE BLOQUE MODIFICADO (PASO 2)
+                    # ==========================================================
+                    
+                    # 1. Obtener datos del mes pasado (el último registro del historial)
+                    df_historial.sort_values('fecha', ascending=True, inplace=True)
+                    last_month_data = df_historial.iloc[-1]
+                    last_month_qty = last_month_data['cantidad_vendida']
+                    last_month_bs = last_month_data['venta_bs']
+                    last_month_date_str = last_month_data['fecha'].strftime('%B %Y')
+
+                    # 2. Obtener precio promedio (usando la función que ya existe)
+                    precio_promedio = obtener_precio_promedio(df_historial)
+
+                    # 3. Definir cantidades esperadas (usando heurística de Celda 13)
+                    cantidad_esperada_baja = limite * 0.5
+                    cantidad_esperada_alta = limite * 1.5
+
+                    # 4. Calcular el Valor Esperado (Bs.)
+                    valor_esperado_baja = resultado['P(Venta Baja)'] * cantidad_esperada_baja * precio_promedio
+                    valor_esperado_alta = resultado['P(Venta Alta)'] * cantidad_esperada_alta * precio_promedio
+                    valor_total_esperado = valor_esperado_baja + valor_esperado_alta
+                    
+                    # 5. Calcular Demanda Esperada (en Cantidad) para el delta
+                    demanda_qty_esperada = (resultado['P(Venta Baja)'] * cantidad_esperada_baja) + (resultado['P(Venta Alta)'] * cantidad_esperada_alta)
+                    delta_qty_str = f"{demanda_qty_esperada - last_month_qty:,.1f} u. vs mes anterior"
+
+
+                    # 6. Mostrar métricas en columnas para comparar
+                    col_met1, col_met2 = st.columns(2)
+                    
+                    with col_met1:
+                        st.metric(
+                            label=f"Venta Mes Anterior ({last_month_date_str})",
+                            value=f"{last_month_qty:,.0f} u.",
+                            help=f"Valor en Bs.: {last_month_bs:,.2f}"
+                        )
+                    
+                    with col_met2:
+                        st.metric(
+                            label=f"Pronóstico de Demanda ({fecha_pred.strftime('%B %Y')})",
+                            value=f"{demanda_qty_esperada:,.1f} u.",
+                            delta=delta_qty_str
+                        )
+
+                    # Mostrar la métrica de Bs. debajo
+                    st.metric(
+                        label=f"Valor Total Esperado ({fecha_pred.strftime('%B %Y')})",
+                        value=f"Bs. {valor_total_esperado:,.2f}",
+                        help=f"Estimación basada en un precio promedio de Bs. {precio_promedio:,.2f}/u. "
+                             f"Valor Esperado (Baja): Bs. {valor_esperado_baja:,.2f}. "
+                             f"Valor Esperado (Alta): Bs. {valor_esperado_alta:,.2f}."
+                    )
+                    
+                    # ==========================================================
+                    # ⭐ FIN DE BLOQUE MODIFICADO
+                    # ==========================================================
+
+
                     st.markdown("---")
                     
                     # Gráfico de Donut para probabilidades
@@ -529,22 +651,29 @@ elif pagina_seleccionada == "Pronóstico":
 # =============================================================================
 elif pagina_seleccionada == "Planificación de Demanda":
 
+    # ==========================================================
+    # ⭐ INICIO DE BLOQUE MODIFICADO (NUEVAS FUNCIONES Y COLORES)
+    # ==========================================================
+    
     # Función para colorear la tabla (Tema Oscuro)
+    # MODIFICADO: para que coincida con los datos reales de tu CSV
     def color_accion(accion):
-        if "PRIORIZAR" in accion:
-            # Texto rojo claro, fondo oscuro
-            color = 'color: #FF8A8A; font-weight: bold;' 
-        elif "STOCK MÍNIMO" in accion:
-            # Texto amarillo, fondo oscuro
-            color = 'color: #FFF59D; font-weight: bold;' 
-        elif "MODERADO" in accion:
-            # Texto verde claro, fondo oscuro
-            color = 'color: #A5D6A7;'
+        accion_str = str(accion).upper() # Convertir a mayúsculas para seguridad
+        if "URGENTE" in accion_str:
+            color = 'color: #FF8A8A; font-weight: bold;' # Rojo claro
+        elif "COMPRAR" == accion_str: # Coincidencia exacta
+            color = 'color: #A5D6A7;' # Verde claro
+        elif "NO COMPRAR" in accion_str:
+            color = 'color: #B0B0B0;' # Gris
         else:
-            color = 'color: #FFFFFF' # Texto blanco por defecto
+            color = 'color: #FFFFFF' # Blanco por defecto
         return color
-
+    
     st.header("Planificación de Demanda y Stock de Seguridad")
+    
+    # --- BLOQUE DE NOTIFICACIÓN ELIMINADO ---
+    
+    st.markdown("---")
     
     df_planif = st.session_state['df_planif']
     
@@ -586,37 +715,64 @@ elif pagina_seleccionada == "Planificación de Demanda":
             'venta_promedio_6m'
         ]
         
+        # ==========================================================
+        # ⭐ INICIO DE BLOQUE MODIFICADO (RENOMBRADO DE TABLA)
+        # ==========================================================
+        
+        # Mapeo de nombres de columnas
+        column_rename_map = {
+            'producto': 'Producto',
+            'segmento': 'Segmento',
+            'accion_recomendada': 'Acción Recomendada',
+            'stock_seguridad_sugerido': 'Stock Seguridad (u.)',
+            'demanda_esperada': 'Demanda Estimada (u.)',
+            'punto_reorden': 'Punto de Reorden (u.)',
+            'prob_venta_alta': 'Prob. Venta Alta',
+            'prob_no_venta': 'Prob. No Venta',
+            'venta_promedio_6m': 'Venta Prom. 6M (u.)'
+        }
+        # Aplicar el renombrado solo a las columnas visibles
+        df_display = df_filtrado[columnas_visibles].rename(columns=column_rename_map)
+        
         # Aplicar estilo de color a la tabla
         st.dataframe(
-            df_filtrado[columnas_visibles].style
+            df_display.style  # <--- Usar df_display
             .set_properties(**{'color': '#FFFFFF'})  # Texto blanco
+            .set_table_styles([{'selector': 'thead th', 'props': [('color', '#E0E0E0')]}])
             .applymap(
-                color_accion, subset=['accion_recomendada']
+                color_accion, subset=['Acción Recomendada'] # <--- Usar nuevo nombre
             ).format({
-                'stock_seguridad_sugerido': '{:.1f}',
-                'demanda_esperada': '{:.1f}',
-                'punto_reorden': '{:.1f}',
-                'prob_venta_alta': '{:.1%}',
-                'prob_no_venta': '{:.1%}',
-                'venta_promedio_6m': '{:.1f}'
+                'Stock Seguridad (u.)': '{:.1f} u.', # <--- Usar nuevos nombres y formatos
+                'Demanda Estimada (u.)': '{:.1f} u.',
+                'Punto de Reorden (u.)': '{:.1f} u.',
+                'Prob. Venta Alta': '{:.1%}',
+                'Prob. No Venta': '{:.1%}',
+                'Venta Prom. 6M (u.)': '{:.1f} u.'
             }),
             use_container_width=True,
             height=500
         )
+        # ==========================================================
+        # ⭐ FIN DE BLOQUE MODIFICADO
+        # ==========================================================
         
         # Resumen
         st.subheader("Resumen de Acciones")
         if 'accion_recomendada' in df_filtrado.columns:
             resumen = df_filtrado['accion_recomendada'].value_counts()
             
-            # Colores del pie chart para tema oscuro
+            # MODIFICADO: Colores del pie chart para coincidir con tu screenshot
             color_map = {
-                "PRIORIZAR REABASTECIMIENTO": "#CC0000",
-                "STOCK MÍNIMO (ALERTA)": "#FFC107",
-                "REABASTECIMIENTO MODERADO": "#A5D6A7"
+                "COMPRAR URGENTE": "#CC0000",            # Rojo
+                "COMPRAR": "#A5D6A7",                  # Verde
+                "NO COMPRAR": "#B0B0B0",                 # Gris
+                # Añadidos por si acaso
+                "MANTENER": "#B0B0B0",                 
+                "COMPRAR CON CAUTELA": "#FFC107",
+                "NO COMPRAR - Liquidar stock": "#B0B0B0"
             }
             nombres_resumen = resumen.index.tolist()
-            colores_mapeados = [color_map.get(nombre, '#B0B0B0') for nombre in nombres_resumen]
+            colores_mapeados = [color_map.get(str(nombre), '#B0B0B0') for nombre in nombres_resumen]
 
             fig = px.pie(
                 values=resumen.values,
@@ -683,27 +839,66 @@ elif pagina_seleccionada == "Segmentación K-Means":
     )
     st.plotly_chart(fig, use_container_width=True)
     
+    # ==========================================================
+    # ⭐ INICIO DE BLOQUE MODIFICADO (PASO 1: DESCRIPCIÓN DEL GRÁFICO)
+    # ==========================================================
+    st.info("""
+    **¿Cómo leer este gráfico?**
+    
+    Este gráfico agrupa cada producto (cada burbuja) en un segmento de comportamiento (color).
+    
+    * **Posición (Eje Y ⬆):** Cuanto más **alto**, más *frecuentemente* se vende el producto (más meses con ventas).
+    * **Posición (Eje X ➡):** Cuanto más a la **derecha**, más *valor total (Bs.)* ha generado el producto.
+    * **Tamaño de la Burbuja (🔵):** Cuanto más **grande**, más *unidades totales* se han vendido.
+    
+    **Ideal:** Los mejores productos están en la esquina superior derecha (se venden a menudo y generan mucho valor).
+    """)
+    # ==========================================================
+    # ⭐ FIN DE BLOQUE MODIFICADO
+    # ==========================================================
+    
     # Estadísticas por segmento
     st.subheader("Estadísticas por Segmento")
+    
+    # ==========================================================
+    # ⭐ INICIO DE BLOQUE MODIFICADO (PASO 2: TABLA MEJORADA)
+    # ==========================================================
     stats = df_agregado.groupby('segmento').agg({
         'producto': 'count',
         'qty_total': ['mean', 'sum'],
         'venta_total': ['mean', 'sum'],
-        'frecuencia': 'mean'
+        'frecuencia': 'mean' # 'frecuencia' es el conteo de meses
     }).round(2)
     stats.columns = ['_'.join(col) for col in stats.columns.values] # Aplanar multi-index
+    
+    # Renombrar columnas a nombres más claros con unidades
     stats = stats.rename(columns={
-        'producto_count': 'N° Productos',
-        'qty_total_mean': 'Qty Promedio',
-        'qty_total_sum': 'Qty Total',
-        'venta_total_mean': 'Venta Promedio',
-        'venta_total_sum': 'Venta Total',
-        'frecuencia_mean': 'Frecuencia Promedio'
+        'producto_count': 'N° de Productos',
+        'qty_total_mean': 'Cant. Promedio (u./mes)',
+        'qty_total_sum': 'Cant. Total (u.)',
+        'venta_total_mean': 'Venta Promedio (Bs./mes)',
+        'venta_total_sum': 'Venta Total (Bs.)',
+        'frecuencia_mean': 'Meses Prom. de Historial'
     })
+    
+    # Aplicar formato para mejor legibilidad
     st.dataframe(
-        stats.style.set_properties(**{'color': '#FFFFFF'}), # Texto blanco
+        stats.style
+        .set_properties(**{'color': '#FFFFFF'}) # Texto blanco
+        .set_table_styles([{'selector': 'thead th', 'props': [('color', '#E0E0E0')]}])
+        .format({
+            'N° de Productos': '{:,.0f}',
+            'Cant. Promedio (u./mes)': '{:,.2f} u.',
+            'Cant. Total (u.)': '{:,.0f} u.',
+            'Venta Promedio (Bs./mes)': 'Bs. {:,.2f}',
+            'Venta Total (Bs.)': 'Bs. {:,.0f}',
+            'Meses Prom. de Historial': '{:,.1f}'
+        }),
         use_container_width=True
     )
+    # ==========================================================
+    # ⭐ FIN DE BLOQUE MODIFICADO
+    # ==========================================================
 
 # =============================================================================
 # PÁGINA 5: SALUD DEL MODELO (Antes Tab 4)
