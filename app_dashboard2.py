@@ -13,7 +13,17 @@ import warnings
 import requests # Añadido para futuras integraciones
 
 warnings.filterwarnings('ignore')
-locale.setlocale(locale.LC_TIME, 'Spanish')
+try:
+    # Para el servidor (Linux) - esto funcionará gracias a packages.txt
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except locale.Error:
+    try:
+        # Fallback para tu máquina local (Windows)
+        locale.setlocale(locale.LC_TIME, 'Spanish')
+    except locale.Error:
+        # Último recurso, usar el default del sistema
+        locale.setlocale(locale.LC_TIME, '')
+        print("Advertencia: No se pudo configurar el locale 'es_ES.UTF-8' ni 'Spanish'. Usando el default.")
 # =============================================================================
 # CONFIGURACIÓN DE PÁGINA
 # =============================================================================
