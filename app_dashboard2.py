@@ -13,11 +13,7 @@ import warnings
 import requests # Añadido para futuras integraciones
 
 warnings.filterwarnings('ignore')
-# Configuración regional para español (para meses como 'Noviembre')
-try:
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-except:
-    locale.setlocale(locale.LC_TIME, 'Spanish')
+locale.setlocale(locale.LC_TIME, 'Spanish')
 # =============================================================================
 # CONFIGURACIÓN DE PÁGINA
 # =============================================================================
